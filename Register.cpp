@@ -11,7 +11,7 @@ namespace DHecs
 	using component_id = uint32_t;
 	using entity_id = uint32_t;
 	std::variant<cmps> component;
-	using entity = std::vector<component>
+	using entity = std::vector<component_id>
 	public:
 		template<typename cp>
 		component_type getComponentType()
@@ -44,27 +44,38 @@ namespace DHecs
 		}
 
 		template<typename cp>
-		component_id getFirstComponentId()
+		std::vector<cp> getComponents()
 		{
-			component_type t = getComponentType<cp>();
-			std::vector<std::pair<component_id, entity_id>> fitting = _registry[t];
-			
-			return fitting[0].first;
+			std::vector<component_id> ids = getComponentIds<cp>();
+			std::vector<cp> res;
+
+			res.reserve(ids.size());
+			std::for_each(ids.begin(), ids.end(), [&](component_id& id){ res.push_back(_components.find(id)); });
+			return res;
 		}
 
 		template<typename cp>
-		component_id getFirstEntityId()
+		cp getComponent(entity_id entity)
 		{
-			component_type t = getComponentType<cp>();
-			std::vector<std::pair<component_id, entity_id>> fitting = _registry[t];
-			
-			return fitting[0].second;
+			std::vector<component_id> ids = _entities[entity];
+
+			return std::find(ids.begin(), ids.end(), [&](component_id& id){ return std::type_index(typeof(cp)) == std::type_index(typeof(_components[id])); });
+		}
+
+		/* subject to change as the entity / component containers arent fixed yet */
+		void addComponent(entity_id entity, component c)
+		{
+			const component_id comp_id = _components.size();
+			_entities[entity].push_back(comp_id);
+			_components.insert(comp_id, c);
+			std::pair<component_id, entity_id> tmp{comp_id, emtity};
+			_registry[std::type_index(typeof(c))].push_back(tmp);
 		}
 		
 	private:
 		std::unordered_map<component_type, std::vector<std::pair<component_id, entity_id>>> _registry;
-		std::vector<component> _components;
-		std::vector<entity> _entities;
+		std::unordered_map<component_id, component> _components;
+		std::unordered_map<entity_id, entity> _entities;
 	};
 };
 
