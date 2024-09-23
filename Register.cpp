@@ -5,9 +5,11 @@
 #include <iostream>
 #include <typeindex>
 #include <typeinfo>
+#include <algorithm>
 
 #define SYSTEM_UPDATE 0
 #define SYSTEM_STARTUP 1
+
 namespace DHecs
 {
 
@@ -16,7 +18,7 @@ namespace DHecs
 	{
 		using component_type = std::type_index;
 		using component_id = uint32_t;
-		std::variant<cmps...> component;
+		using component = std::variant<cmps...>;
 
 		// system should expand to have fixed data members
 		// for faster queries
@@ -30,7 +32,7 @@ namespace DHecs
 		template <typename cp>
 		component_type getComponentType()
 		{
-			return std::type_index(typeof(cp));
+			return std::type_index(typeid(cp));
 		}
 
 		template <typename cp>
@@ -64,7 +66,9 @@ namespace DHecs
 			std::vector<cp> res;
 
 			res.reserve(ids.size());
-			std::for_each(ids.begin(), ids.end(), [&](component_id &id) { res.push_back(_components.find(id)); });
+			std::for_each(ids.begin(), ids.end(), 
+				[&](component_id &id) { res.push_back(std::get<cp>(_components[id]));}
+			);
 			return res;
 		}
 
@@ -73,7 +77,18 @@ namespace DHecs
 		{
 			std::vector<component_id> ids = _entities[entity];
 
-			return std::find(ids.begin(), ids.end(), [&](component_id &id) { return std::type_index(typeof(cp)) == std::type_index(typeof(_components[id])); });
+			for (auto& id : ids)
+			{
+				auto current = _components[id];
+				try
+				{
+					cp res = std::get<cp>(current);
+					return res;
+				}
+				catch(const std::exception& e)
+				{}
+			}
+			throw std::runtime_error("doesnt exist");
 		}
 
 		/* subject to change as the entity / component containers arent fixed yet */
@@ -81,9 +96,9 @@ namespace DHecs
 		{
 			const component_id comp_id = _components.size();
 			_entities[entity].push_back(comp_id);
-			_components.insert(comp_id, c);
+			_components[comp_id] = c;
 			std::pair<component_id, entity_id> tmp{comp_id, entity};
-			_registry[std::type_index(typeof(c))].push_back(tmp);
+			_registry[std::type_index(typeid(c))].push_back(tmp);
 			return comp_id;
 		}
 
@@ -99,9 +114,9 @@ namespace DHecs
 
 		std::vector<system> getSystem(system_type type)
 		{
-			if (sys_type == SYSTEM_STARTUP)
+			if (type == SYSTEM_STARTUP)
 				return startup_systems;
-			else if (sys_type == SYSTEM_UPDATE)
+			else if (type == SYSTEM_UPDATE)
 				return update_systems;
 			else
 				std::cerr << "Invalid system type\n";
@@ -177,5 +192,4 @@ int main()
 
 	reg.addComponent(en, en_pos);
 	reg.addComponent(en, en_vel);
-
 }
